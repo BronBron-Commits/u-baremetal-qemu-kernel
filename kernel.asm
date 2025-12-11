@@ -1,48 +1,64 @@
+; 16-bit real mode start
 [org 0x1000]
+[bits 16]
 
-; set video mode 80x25 text
-mov ah, 0x00
-mov al, 0x03
-int 0x10
+cli                     ; disable interrupts
+mov ax, 0x0000
+mov ds, ax
+mov ss, ax
+mov sp, 0x7C00
 
-; print 'K' on page 0
-mov ah, 0x0E
-mov al, 'K'
-int 0x10
+; load GDT
+lgdt [gdt_descriptor]
 
-; wait for keypress
-mov ah, 0x00
-int 0x16
+; set PE bit in CR0
+mov eax, cr0
+or eax, 1
+mov cr0, eax
 
-; switch to page 1
-mov ah, 0x05
-mov al, 1
-int 0x10
+; far jump to 32-bit protected mode
+jmp 0x08:protected_mode_start
 
-; clear new page
-mov ah, 0x06
-xor al, al
-xor cx, cx
-mov dx, 0x184F
-mov bh, 0x07
-int 0x10
+; -----------------------------
+; GDT definition
+; -----------------------------
+gdt_start:
+    dq 0x0000000000000000       ; null descriptor
+    dq 0x00CF9A000000FFFF       ; code segment descriptor
+    dq 0x00CF92000000FFFF       ; data segment descriptor
+gdt_end:
 
-; print message on page 1
-mov si, msg
-call print_string
+gdt_descriptor:
+    dw gdt_end - gdt_start - 1
+    dd gdt_start
 
-; hang
-hlt
+; -----------------------------
+; 32-bit protected mode
+; -----------------------------
+[bits 32]
+protected_mode_start:
+    mov ax, 0x10        ; data segment selector (2nd entry)
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
 
-print_string:
-    mov ah, 0x0E
-.next:
+    mov ebp, 0x90000
+    mov esp, ebp
+
+    ; write message directly to VGA memory
+    mov edi, 0xB8000
+    mov esi, message
+
+.print_loop:
     lodsb
     or al, al
     jz .done
-    int 0x10
-    jmp .next
+    mov ah, 0x0F         ; white text
+    stosw
+    jmp .print_loop
 .done:
-    ret
+    hlt
 
-msg db "Welcome to the second window!",0
+message db "Protected mode active!",0
