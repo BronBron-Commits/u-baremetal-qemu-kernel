@@ -633,8 +633,10 @@ gui_loop:
     cmp byte [mouse_dirty], 1
     jne .check_key
 
-    call redraw_desktop
+    call erase_mouse_cursor
+
     call draw_mouse_cursor
+
     call handle_mouse_click
 
 .check_key:
@@ -1249,23 +1251,91 @@ update_mouse_position:
 .done:
     ret
 
+
 draw_mouse_cursor:
-    ; vertical line
     mov ax, [mouse_x]
-    mov bx, [mouse_y]
-    mov cx, 2
-    mov dx, 10
-    mov si, 15
-    call draw_rect
+    mov [mouse_draw_x], ax
 
-    ; horizontal line
-    mov ax, [mouse_x]
-    mov bx, [mouse_y]
-    mov cx, 10
-    mov dx, 2
-    mov si, 15
-    call draw_rect
+    mov ax, [mouse_y]
+    mov [mouse_draw_y], ax
 
+    call xor_mouse_cursor
+    ret
+
+erase_mouse_cursor:
+    call xor_mouse_cursor
+    ret
+
+xor_mouse_cursor:
+    push ax
+    push bx
+    push cx
+    push dx
+    push di
+    push es
+
+    mov ax, 0xA000
+    mov es, ax
+
+    ; draw vertical 10px XOR line
+    mov cx, 0
+
+.vert_loop:
+    cmp cx, 10
+    jae .horiz_start
+
+    mov ax, [mouse_draw_y]
+    add ax, cx
+    cmp ax, 199
+    ja .vert_next
+
+    mov bx, 320
+    mul bx
+
+    add ax, [mouse_draw_x]
+    cmp ax, 63999
+    ja .vert_next
+
+    mov di, ax
+    xor byte [es:di], 15
+
+.vert_next:
+    inc cx
+    jmp .vert_loop
+
+.horiz_start:
+    mov cx, 0
+
+.horiz_loop:
+    cmp cx, 10
+    jae .done
+
+    mov ax, [mouse_draw_y]
+    cmp ax, 199
+    ja .horiz_next
+
+    mov bx, 320
+    mul bx
+
+    add ax, [mouse_draw_x]
+    add ax, cx
+    cmp ax, 63999
+    ja .horiz_next
+
+    mov di, ax
+    xor byte [es:di], 15
+
+.horiz_next:
+    inc cx
+    jmp .horiz_loop
+
+.done:
+    pop es
+    pop di
+    pop dx
+    pop cx
+    pop bx
+    pop ax
     ret
 
 handle_mouse_click:
@@ -2109,6 +2179,10 @@ mouse_x:
     dw 160
 mouse_y:
     dw 100
+mouse_draw_x:
+    dw 160
+mouse_draw_y:
+    dw 100
 mouse_b1:
     db 0
 mouse_b2:
@@ -2121,6 +2195,17 @@ mouse_dirty:
     db 0
 mouse_click_lock:
     db 0
+
+mouse_redraw_tick:
+    db 0
+
+cursor_save_x:
+    dw 160
+cursor_save_y:
+    dw 100
+
+cursor_backbuffer:
+    times 144 db 0
 
 text_row:
     db 0

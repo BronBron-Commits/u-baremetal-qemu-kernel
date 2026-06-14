@@ -7,3 +7,14 @@ fix_tiny_font.py
 polish_gui.py
 tiny_font_patch.py
 
+
+add_cursor_backbuffer.py
+add_mouse_cursor.py
+fix_cursor_backbuffer.py
+fix_mouse_files_crash.py
+reduce_mouse_flicker.py
+rollback_cursor_backbuffer.py
+stop_mouse_flicker.py
+throttle_mouse_redraw.py
+xor_mouse_cursor.py
+
