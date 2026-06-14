@@ -1,3 +1,9 @@
-*.bin
+
 os.img
+*.bin
 kernel_padded.bin
+
+fix_tiny_font.py
+polish_gui.py
+tiny_font_patch.py
+

@@ -693,7 +693,7 @@ redraw_desktop:
 
     xor di, di
     mov cx, 64000
-    mov al, 0
+    mov al, 1
 
 .fill_bg:
     stosb
@@ -703,37 +703,37 @@ redraw_desktop:
     mov ax, 0
     mov bx, 0
     mov cx, 320
-    mov dx, 18
-    mov si, 8
+    mov dx, 20
+    mov si, 0
     call draw_rect
 
     mov ax, 0
-    mov bx, 18
+    mov bx, 20
     mov cx, 320
     mov dx, 2
     mov si, 11
     call draw_rect
 
     ; left navigation rail
-    mov ax, 0
-    mov bx, 20
-    mov cx, 90
-    mov dx, 162
-    mov si, 8
+    mov ax, 8
+    mov bx, 28
+    mov cx, 78
+    mov dx, 146
+    mov si, 0
     call draw_rect
 
-    mov ax, 90
-    mov bx, 20
-    mov cx, 2
-    mov dx, 162
+    mov ax, 86
+    mov bx, 28
+    mov cx, 1
+    mov dx, 146
     mov si, 11
     call draw_rect
 
     ; files icon
     mov ax, 12
     mov bx, 36
-    mov cx, 64
-    mov dx, 20
+    mov cx, 62
+    mov dx, 18
     mov si, 1
     call draw_rect
 
@@ -747,8 +747,8 @@ redraw_desktop:
     ; shell icon
     mov ax, 12
     mov bx, 72
-    mov cx, 64
-    mov dx, 20
+    mov cx, 62
+    mov dx, 18
     mov si, 1
     call draw_rect
 
@@ -762,8 +762,8 @@ redraw_desktop:
     ; about icon
     mov ax, 12
     mov bx, 108
-    mov cx, 64
-    mov dx, 20
+    mov cx, 62
+    mov dx, 18
     mov si, 1
     call draw_rect
 
@@ -775,43 +775,43 @@ redraw_desktop:
     call draw_rect
 
     ; desktop text
-    mov dh, 1
-    mov dl, 14
+    mov ax, 12
+    mov bx, 7
     mov si, gui_title
-    call draw_text
+    call draw_tiny_text
 
     mov dh, 23
     mov dl, 2
     mov si, gui_status
     call draw_text
 
-    mov dh, 5
-    mov dl, 3
+    mov ax, 24
+    mov bx, 43
     mov si, gui_files
-    call draw_text
+    call draw_tiny_text
 
-    mov dh, 9
-    mov dl, 3
+    mov ax, 24
+    mov bx, 79
     mov si, gui_shell
-    call draw_text
+    call draw_tiny_text
 
-    mov dh, 14
-    mov dl, 3
+    mov ax, 24
+    mov bx, 115
     mov si, gui_about
-    call draw_text
+    call draw_tiny_text
 
     ; bottom status bar
     mov ax, 0
     mov bx, 184
     mov cx, 320
     mov dx, 16
-    mov si, 8
+    mov si, 0
     call draw_rect
 
     mov ax, 0
-    mov bx, 182
+    mov bx, 183
     mov cx, 320
-    mov dx, 2
+    mov dx, 1
     mov si, 11
     call draw_rect
 
@@ -968,41 +968,43 @@ gui_read_and_show_file:
     ret
 
 draw_file_viewer:
-    mov ax, 88
+    mov ax, 94
     mov bx, 28
-    mov cx, 220
+    mov cx, 214
     mov dx, 150
     mov si, 7
     call draw_window
 
-    mov ax, 88
+    ; title region
+    mov ax, 94
     mov bx, 28
-    mov cx, 220
-    mov dx, 14
-    mov si, 8
+    mov cx, 214
+    mov dx, 18
+    mov si, 0
     call draw_rect
 
-    mov ax, 88
-    mov bx, 42
-    mov cx, 220
+    mov ax, 94
+    mov bx, 46
+    mov cx, 214
     mov dx, 2
     mov si, 11
     call draw_rect
 
-    mov ax, 96
-    mov bx, 55
-    mov cx, 204
-    mov dx, 112
+    ; content panel
+    mov ax, 102
+    mov bx, 58
+    mov cx, 198
+    mov dx, 106
     mov si, 0
     call draw_rect
 
     mov dh, 4
-    mov dl, 12
+    mov dl, 13
     mov si, viewer_title
     call draw_text
 
-    mov dh, 7
-    mov dl, 12
+    mov dh, 8
+    mov dl, 13
     mov si, sector_buffer
     call draw_multiline_text
 
@@ -1090,6 +1092,166 @@ draw_about_window:
     ret
 
 
+
+
+draw_tiny_text:
+    push ax
+    push bx
+    push si
+
+    mov [tiny_x], ax
+    mov [tiny_y], bx
+    mov [tiny_str], si
+
+.tiny_next:
+    mov si, [tiny_str]
+    mov al, [si]
+    cmp al, 0
+    je .tiny_done
+
+    inc si
+    mov [tiny_str], si
+
+    cmp al, ' '
+    je .tiny_space
+
+    cmp al, 'a'
+    jb .not_lower
+    cmp al, 'z'
+    ja .not_lower
+    sub al, 32
+
+.not_lower:
+    call draw_tiny_char
+    add word [tiny_x], 8
+    jmp .tiny_next
+
+.tiny_space:
+    add word [tiny_x], 5
+    jmp .tiny_next
+
+.tiny_done:
+    pop si
+    pop bx
+    pop ax
+    ret
+
+draw_tiny_char:
+    push ax
+    push bx
+    push cx
+    push dx
+    push si
+
+    cmp al, '-'
+    je .dash
+    cmp al, '.'
+    je .dot
+    cmp al, '/'
+    je .slash
+
+    cmp al, '0'
+    jb .letter_check
+    cmp al, '9'
+    ja .letter_check
+
+    sub al, '0'
+    xor ah, ah
+    mov bx, 5
+    mul bx
+    mov si, font_digits
+    add si, ax
+    jmp .draw_glyph
+
+.letter_check:
+    cmp al, 'A'
+    jb .done
+    cmp al, 'Z'
+    ja .done
+
+    sub al, 'A'
+    xor ah, ah
+    mov bx, 5
+    mul bx
+    mov si, font_letters
+    add si, ax
+    jmp .draw_glyph
+
+.dash:
+    mov si, font_dash
+    jmp .draw_glyph
+
+.dot:
+    mov si, font_dot
+    jmp .draw_glyph
+
+.slash:
+    mov si, font_slash
+
+.draw_glyph:
+    mov byte [tiny_row], 0
+
+.row_loop:
+    cmp byte [tiny_row], 5
+    jae .done
+
+    mov bl, [si]
+    inc si
+
+    mov byte [tiny_col], 0
+
+.col_loop:
+    cmp byte [tiny_col], 3
+    jae .next_row
+
+    mov al, bl
+    mov cl, 2
+    sub cl, [tiny_col]
+    shr al, cl
+    and al, 1
+
+    cmp al, 0
+    je .skip_pixel
+
+    push si
+    push bx
+
+    mov ax, [tiny_x]
+    mov bl, [tiny_col]
+    xor bh, bh
+    shl bx, 1
+    add ax, bx
+
+    mov bx, [tiny_y]
+    mov cl, [tiny_row]
+    xor ch, ch
+    shl cx, 1
+    add bx, cx
+
+    mov cx, 2
+    mov dx, 2
+    mov si, 11
+    call draw_rect
+
+    pop bx
+    pop si
+
+.skip_pixel:
+    inc byte [tiny_col]
+    jmp .col_loop
+
+.next_row:
+    inc byte [tiny_row]
+    jmp .row_loop
+
+.done:
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
 draw_multiline_text:
     push ax
     push bx
@@ -1117,7 +1279,7 @@ draw_multiline_text:
     cmp al, 10
     je .newline
 
-    cmp byte [text_col], 36
+    cmp byte [text_col], 37
     jae .wrap_line
 
     mov ah, 0x02
@@ -1142,7 +1304,7 @@ draw_multiline_text:
 
 .wrap_line:
     inc byte [text_row]
-    mov byte [text_col], 12
+    mov byte [text_col], 13
 
     cmp byte [text_row], 19
     jae .done
@@ -1151,7 +1313,7 @@ draw_multiline_text:
 
 .newline:
     inc byte [text_row]
-    mov byte [text_col], 12
+    mov byte [text_col], 13
     inc si
 
     cmp byte [text_row], 19
@@ -1200,15 +1362,15 @@ draw_text:
 
 
 draw_window:
-    ; AX=x BX=y CX=w DX=h SI=color ignored
+    ; AX=x BX=y CX=w DX=h SI ignored
     push ax
     push bx
     push cx
     push dx
 
-    ; shadow
-    add ax, 3
-    add bx, 3
+    ; soft shadow
+    add ax, 2
+    add bx, 2
     mov si, 0
     call draw_rect
 
@@ -1222,50 +1384,37 @@ draw_window:
     push cx
     push dx
 
-    ; dark body
+    ; body
+    mov si, 1
+    call draw_rect
+
+    ; top accent
+    mov dx, 2
+    mov si, 11
+    call draw_rect
+
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+
+    push ax
+    push bx
+    push cx
+    push dx
+
+    ; bottom subtle edge
+    add bx, dx
+    sub bx, 1
+    mov dx, 1
     mov si, 8
     call draw_rect
 
-    ; cyan top border
-    mov dx, 2
-    mov si, 11
-    call draw_rect
-
     pop dx
     pop cx
     pop bx
     pop ax
 
-    push ax
-    push bx
-    push cx
-    push dx
-
-    ; cyan left border
-    mov cx, 2
-    mov si, 11
-    call draw_rect
-
-    pop dx
-    pop cx
-    pop bx
-    pop ax
-
-    push ax
-    push bx
-    push cx
-    push dx
-
-    ; magenta accent line
-    add bx, 14
-    mov dx, 2
-    mov si, 13
-    call draw_rect
-
-    pop dx
-    pop cx
-    pop bx
-    pop ax
     ret
 
 ; draw_rect
@@ -1504,8 +1653,69 @@ ftable_loading:
 
     db "Loading file table...",13,10,13,10,0
 
+
+tiny_x:
+    dw 0
+tiny_y:
+    dw 0
+tiny_str:
+    dw 0
+tiny_row:
+    db 0
+tiny_col:
+    db 0
+
+font_dash:
+    db 0,0,7,0,0
+
+font_dot:
+    db 0,0,0,0,2
+
+font_slash:
+    db 1,1,2,4,4
+
+font_digits:
+    db 7,5,5,5,7
+    db 2,6,2,2,7
+    db 7,1,7,4,7
+    db 7,1,7,1,7
+    db 5,5,7,1,1
+    db 7,4,7,1,7
+    db 7,4,7,5,7
+    db 7,1,1,1,1
+    db 7,5,7,5,7
+    db 7,5,7,1,7
+
+font_letters:
+    db 7,5,7,5,5 ; A
+    db 6,5,6,5,6 ; B
+    db 7,4,4,4,7 ; C
+    db 6,5,5,5,6 ; D
+    db 7,4,6,4,7 ; E
+    db 7,4,6,4,4 ; F
+    db 7,4,5,5,7 ; G
+    db 5,5,7,5,5 ; H
+    db 7,2,2,2,7 ; I
+    db 1,1,1,5,7 ; J
+    db 5,5,6,5,5 ; K
+    db 4,4,4,4,7 ; L
+    db 5,7,7,5,5 ; M
+    db 5,7,7,7,5 ; N
+    db 7,5,5,5,7 ; O
+    db 7,5,7,4,4 ; P
+    db 7,5,5,7,1 ; Q
+    db 7,5,7,6,5 ; R
+    db 7,4,7,1,7 ; S
+    db 7,2,2,2,2 ; T
+    db 5,5,5,5,7 ; U
+    db 5,5,5,5,2 ; V
+    db 5,5,7,7,5 ; W
+    db 5,5,2,5,5 ; X
+    db 5,5,2,2,2 ; Y
+    db 7,1,2,4,7 ; Z
+
 gui_title:
-    db "u-baremetal", 0
+    db "u-baremetal os", 0
 
 gui_files:
     db "files", 0
@@ -1532,7 +1742,7 @@ file_hint:
     db "1-3 OPEN  ESC BACK", 0
 
 viewer_title:
-    db "viewer", 0
+    db "file viewer", 0
 
 viewer_loaded:
     db "FILE LOADED", 0
@@ -1559,7 +1769,7 @@ about_msg:
     db "u-baremetal v0.1", 0
 
 gui_status:
-    db "up/down select  enter open  esc exit", 0
+    db "UP/DOWN navigate   ENTER open   ESC back", 0
 
 gui_return:
     db "Returned from GUI", 13, 10, 0
