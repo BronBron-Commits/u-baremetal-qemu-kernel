@@ -617,9 +617,31 @@ copy_string:
 
 draw_gui:
     mov byte [cursor_pos], 0
+
+    mov word [mouse_x], 160
+    mov word [mouse_y], 100
+    mov byte [mouse_cycle], 0
+    mov byte [mouse_click_lock], 0
+
+    call init_ps2_mouse
     call redraw_desktop
+    call draw_mouse_cursor
 
 gui_loop:
+    call poll_ps2_mouse
+
+    cmp byte [mouse_dirty], 1
+    jne .check_key
+
+    call redraw_desktop
+    call draw_mouse_cursor
+    call handle_mouse_click
+
+.check_key:
+    mov ah, 0x01
+    int 0x16
+    jz gui_loop
+
     mov ah, 0x00
     int 0x16
 
@@ -642,6 +664,7 @@ gui_up:
     je gui_loop
     dec byte [cursor_pos]
     call redraw_desktop
+    call draw_mouse_cursor
     jmp gui_loop
 
 gui_down:
@@ -649,6 +672,7 @@ gui_down:
     je gui_loop
     inc byte [cursor_pos]
     call redraw_desktop
+    call draw_mouse_cursor
     jmp gui_loop
 
 gui_enter:
@@ -666,6 +690,7 @@ gui_enter:
 gui_open_files:
     call files_menu_loop
     call redraw_desktop
+    call draw_mouse_cursor
     jmp gui_loop
 
 gui_open_shell:
@@ -1092,6 +1117,206 @@ draw_about_window:
     ret
 
 
+
+
+
+init_ps2_mouse:
+    ; enable auxiliary PS/2 device
+    call ps2_wait_input
+    mov al, 0xA8
+    out 0x64, al
+
+    ; set default mouse settings
+    mov al, 0xF6
+    call ps2_mouse_write
+    call ps2_mouse_read_ack
+
+    ; enable data reporting
+    mov al, 0xF4
+    call ps2_mouse_write
+    call ps2_mouse_read_ack
+
+    ret
+
+ps2_mouse_write:
+    push ax
+
+    call ps2_wait_input
+    mov al, 0xD4
+    out 0x64, al
+
+    call ps2_wait_input
+    pop ax
+    out 0x60, al
+
+    ret
+
+ps2_mouse_read_ack:
+    call ps2_wait_output
+    in al, 0x60
+    ret
+
+ps2_wait_input:
+    in al, 0x64
+    test al, 0x02
+    jnz ps2_wait_input
+    ret
+
+ps2_wait_output:
+    in al, 0x64
+    test al, 0x01
+    jz ps2_wait_output
+    ret
+
+poll_ps2_mouse:
+    mov byte [mouse_dirty], 0
+
+    in al, 0x64
+    test al, 0x01
+    jz .done
+
+    test al, 0x20
+    jz .done
+
+    in al, 0x60
+
+    cmp byte [mouse_cycle], 0
+    je .byte1
+
+    cmp byte [mouse_cycle], 1
+    je .byte2
+
+    cmp byte [mouse_cycle], 2
+    je .byte3
+
+    mov byte [mouse_cycle], 0
+    jmp .done
+
+.byte1:
+    test al, 0x08
+    jz .done
+
+    mov [mouse_b1], al
+    mov byte [mouse_cycle], 1
+    jmp .done
+
+.byte2:
+    mov [mouse_b2], al
+    mov byte [mouse_cycle], 2
+    jmp .done
+
+.byte3:
+    mov [mouse_b3], al
+    mov byte [mouse_cycle], 0
+    call update_mouse_position
+    mov byte [mouse_dirty], 1
+
+.done:
+    ret
+
+update_mouse_position:
+    ; X += signed movement
+    mov al, [mouse_b2]
+    cbw
+    add [mouse_x], ax
+
+    ; Y -= signed movement because screen Y goes downward
+    mov al, [mouse_b3]
+    cbw
+    neg ax
+    add [mouse_y], ax
+
+    ; clamp X >= 0
+    cmp word [mouse_x], 0
+    jge .check_x_high
+    mov word [mouse_x], 0
+
+.check_x_high:
+    cmp word [mouse_x], 319
+    jle .check_y_low
+    mov word [mouse_x], 319
+
+.check_y_low:
+    cmp word [mouse_y], 0
+    jge .check_y_high
+    mov word [mouse_y], 0
+
+.check_y_high:
+    cmp word [mouse_y], 199
+    jle .done
+    mov word [mouse_y], 199
+
+.done:
+    ret
+
+draw_mouse_cursor:
+    ; vertical line
+    mov ax, [mouse_x]
+    mov bx, [mouse_y]
+    mov cx, 2
+    mov dx, 10
+    mov si, 15
+    call draw_rect
+
+    ; horizontal line
+    mov ax, [mouse_x]
+    mov bx, [mouse_y]
+    mov cx, 10
+    mov dx, 2
+    mov si, 15
+    call draw_rect
+
+    ret
+
+handle_mouse_click:
+    mov al, [mouse_b1]
+    test al, 1
+    jz .release
+
+    cmp byte [mouse_click_lock], 1
+    je .done
+
+    mov byte [mouse_click_lock], 1
+
+    ; FILES button: x 12-74, y 36-56
+    cmp word [mouse_x], 12
+    jb .done
+    cmp word [mouse_x], 74
+    ja .done
+    cmp word [mouse_y], 36
+    jb .check_shell
+    cmp word [mouse_y], 56
+    ja .check_shell
+
+    call draw_files_window
+    call draw_mouse_cursor
+    jmp .done
+
+.check_shell:
+    ; SHELL button: x 12-74, y 72-92
+    cmp word [mouse_y], 72
+    jb .check_about
+    cmp word [mouse_y], 92
+    ja .check_about
+
+    call draw_shell_window
+    jmp .done
+
+.check_about:
+    ; ABOUT button: x 12-74, y 108-128
+    cmp word [mouse_y], 108
+    jb .done
+    cmp word [mouse_y], 128
+    ja .done
+
+    call draw_about_window
+    jmp .done
+
+.release:
+    mov byte [mouse_click_lock], 0
+
+.done:
+    ret
 
 
 draw_tiny_text:
@@ -1878,6 +2103,23 @@ rect_color:
     dw 0
 
 cursor_pos:
+    db 0
+
+mouse_x:
+    dw 160
+mouse_y:
+    dw 100
+mouse_b1:
+    db 0
+mouse_b2:
+    db 0
+mouse_b3:
+    db 0
+mouse_cycle:
+    db 0
+mouse_dirty:
+    db 0
+mouse_click_lock:
     db 0
 
 text_row:
