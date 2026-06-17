@@ -630,12 +630,28 @@ draw_gui:
 gui_loop:
     call poll_ps2_mouse
 
+    cmp byte [shell_dragging], 1
+    jne .no_drag
+
+    mov ax, [mouse_x]
+    sub ax, [drag_offset_x]
+    mov [shell_x], ax
+
+    mov ax, [mouse_y]
+    sub ax, [drag_offset_y]
+    mov [shell_y], ax
+
+.no_drag:
+
     cmp byte [mouse_dirty], 1
     jne .check_key
 
     call erase_mouse_cursor
 
     call draw_mouse_cursor
+
+    call handle_mouse_click
+    call handle_mouse_click
 
     call handle_mouse_click
 
@@ -696,10 +712,12 @@ gui_open_files:
     jmp gui_loop
 
 gui_open_shell:
+    mov byte [shell_visible], 1
     call draw_shell_window
     jmp gui_loop
 
 gui_open_about:
+    mov byte [about_visible], 1
     call draw_about_window
     jmp gui_loop
 
@@ -1122,6 +1140,21 @@ draw_about_window:
 
 
 
+draw_open_windows:
+
+    cmp byte [shell_visible], 1
+    jne .skip_shell
+    call draw_shell_window
+
+.skip_shell:
+
+    cmp byte [about_visible], 1
+    jne .skip_about
+    call draw_about_window
+
+.skip_about:
+    ret
+
 init_ps2_mouse:
     ; enable auxiliary PS/2 device
     call ps2_wait_input
@@ -1211,6 +1244,12 @@ poll_ps2_mouse:
     mov [mouse_b3], al
     mov byte [mouse_cycle], 0
     call update_mouse_position
+    inc byte [mouse_redraw_tick]
+
+    cmp byte [mouse_redraw_tick], 3
+    jb .done
+
+    mov byte [mouse_redraw_tick], 0
     mov byte [mouse_dirty], 1
 
 .done:
@@ -1352,7 +1391,7 @@ handle_mouse_click:
     cmp word [mouse_x], 12
     jb .done
     cmp word [mouse_x], 74
-    ja .done
+    ja .check_windows
     cmp word [mouse_y], 36
     jb .check_shell
     cmp word [mouse_y], 56
@@ -1369,6 +1408,7 @@ handle_mouse_click:
     cmp word [mouse_y], 92
     ja .check_about
 
+    mov byte [shell_visible], 1
     call draw_shell_window
     jmp .done
 
@@ -1379,7 +1419,44 @@ handle_mouse_click:
     cmp word [mouse_y], 128
     ja .done
 
+    mov byte [about_visible], 1
     call draw_about_window
+    jmp .done
+
+.check_windows:
+
+    cmp byte [shell_visible], 1
+    jne .done
+
+    mov ax, [shell_x]
+    cmp word [mouse_x], ax
+    jb .done
+
+    add ax, 190
+    cmp word [mouse_x], ax
+    ja .done
+
+    mov ax, [shell_y]
+    cmp word [mouse_y], ax
+    jb .done
+
+    add ax, 15
+    cmp word [mouse_y], ax
+    ja .done
+
+    mov byte [shell_dragging], 1
+    mov word [shell_x], 10
+    mov word [shell_y], 10
+    
+    mov ax, [mouse_x]
+    sub ax, [shell_x]
+    mov [drag_offset_x], ax
+
+    mov ax, [mouse_y]
+    sub ax, [shell_y]
+    mov [drag_offset_y], ax
+
+    jmp .done
     jmp .done
 
 .release:
@@ -2172,6 +2249,27 @@ rect_h:
 rect_color:
     dw 0
 
+shell_x:
+    dw 140
+
+shell_y:
+    dw 80
+
+shell_dragging:
+    db 0
+
+drag_offset_x:
+    dw 0
+
+drag_offset_y:
+    dw 0
+
+shell_visible:
+    db 0
+
+about_visible:
+    db 0
+
 cursor_pos:
     db 0
 
@@ -2211,3 +2309,29 @@ text_row:
     db 0
 text_col:
     db 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
