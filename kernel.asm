@@ -622,6 +622,7 @@ draw_gui:
     mov word [mouse_y], 100
     mov byte [mouse_cycle], 0
     mov byte [mouse_click_lock], 0
+    mov byte [shell_dragging], 0
 
     call init_ps2_mouse
     call redraw_desktop
@@ -1461,6 +1462,7 @@ handle_mouse_click:
 
 .release:
     mov byte [mouse_click_lock], 0
+    mov byte [shell_dragging], 0
 
 .done:
     ret
